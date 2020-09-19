@@ -697,9 +697,7 @@ int BosfsImpl::getattr(const char *path, struct stat *stbuf, fuse_file_info *fi)
     if (fi != nullptr) {
         DataCacheEntity *ent = (DataCacheEntity *) fi->fh;
         path = ent->get_path();
-        BOSFS_INFO("getattr [fi->fh=%lx][path:%s]", fi->fh, path);
     } else {
-        BOSFS_INFO("getattr [path=%s]", path);
         realpath = _bosfs_util.get_real_path(path);
         path = realpath.c_str();
     }
