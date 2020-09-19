@@ -1337,7 +1337,7 @@ size_t DataCache::set_ensure_free_disk_space(size_t size)
 }
 
 DataCache::DataCache(BosfsUtil *bosfs_util, FileManager *file_manager)
-    : _bosfs_util(bosfs_util), _file_manager(file_manager) {
+    : _bosfs_util(bosfs_util), _file_manager(file_manager), _free_disk_space(0) {
     pthread_mutex_init(&_data_cache_lock, NULL);
 }
 

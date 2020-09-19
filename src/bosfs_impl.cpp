@@ -51,6 +51,7 @@ int BosfsImpl::init_bos(BosfsOptions &bosfs_options, std::string &errmsg) {
 
 void BosfsImpl::init(struct fuse_conn_info *conn, fuse_config *cfg) {
     BOSFS_INFO("fuse init");
+    cfg->nullpath_ok = 1;
 
     cfg->entry_timeout = 0;
     cfg->attr_timeout = 0;
@@ -70,7 +71,7 @@ void BosfsImpl::destroy() {
 int BosfsImpl::access(const char *path, int mask) {
     std::string realpath = _bosfs_util.get_real_path(path);
     path = realpath.c_str();
-    BOSFS_INFO("access[path=%s][mask=%s%s%s%s]", path,
+    BOSFS_INFO("access [path=%s][mask=%s%s%s%s]", path,
             ((mask & R_OK) == R_OK) ? "R_OK" : "",
             ((mask & W_OK) == W_OK) ? "W_OK" : "",
             ((mask & X_OK) == X_OK) ? "X_OK" : "",
@@ -178,13 +179,13 @@ int BosfsImpl::read(const char *path, char *buf, size_t size, off_t offset, stru
 
 int BosfsImpl::write(const char *path, const char *buf, size_t size,
         off_t offset, struct fuse_file_info *fi) {
-    BOSFS_INFO("[path=%s][size=%u][offset=%ld][fd=%lx]", path, size, offset, fi->fh);
+    BOSFS_INFO("write [path=%s][size=%u][offset=%ld][fd=%lx]", path, size, offset, fi->fh);
     DataCacheEntity *ent = (DataCacheEntity *) fi->fh;
     return ent->write(buf, offset, size);
 }
 
 int BosfsImpl::flush(const char *path, struct fuse_file_info *fi) {
-    BOSFS_INFO("[path=%s][fh=%lx]", path, fi->fh);
+    BOSFS_INFO("flush [path=%s][fh=%lx]", path, fi->fh);
     DataCacheEntity *ent = (DataCacheEntity *) fi->fh;
     ent->update_mtime();
     if (ent->flush(false) != 0) {
@@ -454,20 +455,26 @@ int BosfsImpl::rename(const char *from, const char *to, unsigned int flags) {
 
 int BosfsImpl::opendir(const char *path, struct fuse_file_info *fi) {
     BOSFS_INFO("opendir [path=%s][flags=%d]", path, fi->flags);
-    // do nothing
     std::string realpath = _bosfs_util.get_real_path(path);
+    const char *orig_path = path;
     path = realpath.c_str();
     int ret = _bosfs_util.check_path_accessible(path);
     if (ret != 0) {
         return ret;
     }
-    return _bosfs_util.check_object_access(path, R_OK, NULL);
+    ret = _bosfs_util.check_object_access(path, R_OK, NULL);
+    if (ret == 0) {
+        fi->fh = (uint64_t) strdup(orig_path);
+    }
+    return ret;
 }
 
 int BosfsImpl::readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset,
     struct fuse_file_info *fi, enum fuse_readdir_flags flags) {
-    (void) fi;
     (void) flags;
+    if (fi != nullptr) {
+        path = (const char *) fi->fh;
+    }
     enum fuse_fill_dir_flags fill_flags = (enum fuse_fill_dir_flags) 0;
     LOG(INFO) << "readdir, path:" << path << " offset:" << offset;
     std::string path_(path+1);
@@ -520,17 +527,25 @@ int BosfsImpl::readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_
 
 int BosfsImpl::releasedir(const char* path, struct fuse_file_info *fi) {
     (void) path;
-    (void) fi;
+    free((char *) fi->fh);
+    fi->fh = 0;
     return 0;
 }
 
-int BosfsImpl::chmod(const char *path, mode_t mode)
-{
-    BOSFS_INFO("chmod [path=%s][mode=%04o]", path, mode);
-    std::string realpath = _bosfs_util.get_real_path(path);
-    path = realpath.c_str();
+int BosfsImpl::chmod(const char *path, mode_t mode, fuse_file_info *fi) {
+    std::string realpath;
+    if (fi != nullptr) {
+        DataCacheEntity *ent = (DataCacheEntity *) fi->fh;
+        path = ent->get_path();
+        BOSFS_INFO("chmod [fi->fh=%lx][mode=%04o][path:%s]", fi->fh, mode, path);
+    } else {
+        BOSFS_INFO("chmod [path=%s][mode=%04o]", path, mode);
+        realpath = _bosfs_util.get_real_path(path);
+        path = realpath.c_str();
+    }
+
     if (0 == strcmp(path, "/")) {
-        LOG(ERROR) << "ignored chmod for mountpoint, path:" << path << " mode:" << mode;
+        LOG(ERROR) << "ignored chmod for bucket, path:" << path << " mode:" << mode;
         return 0;
     }
     int ret = _bosfs_util.check_path_accessible(path);
@@ -568,11 +583,19 @@ int BosfsImpl::chmod(const char *path, mode_t mode)
     return 0;
 }
 
-int BosfsImpl::chown(const char *path, uid_t uid, gid_t gid) {
-    std::string realpath = _bosfs_util.get_real_path(path);
-    path = realpath.c_str();
+int BosfsImpl::chown(const char *path, uid_t uid, gid_t gid, fuse_file_info *fi) {
+    std::string realpath;
+    if (fi != nullptr) {
+        DataCacheEntity *ent = (DataCacheEntity *) fi->fh;
+        path = ent->get_path();
+        BOSFS_INFO("chown [fi->fh=%lx][uid=%d][gid=%d][path:%s]", fi->fh, uid, gid, path);
+    } else {
+        BOSFS_INFO("chown [path=%s][uid=%d][gid=%d]", path, uid, gid);
+        realpath = _bosfs_util.get_real_path(path);
+        path = realpath.c_str();
+    }
     if (0 == strcmp(path, "/")) {
-        LOG(ERROR) << "ignored chown for mountpoint, path:" << path << " uid:" << uid << " gid:"
+        LOG(ERROR) << "ignored chown for bucket, path:" << path << " uid:" << uid << " gid:"
             << gid;
         return 0;
     }
@@ -616,9 +639,16 @@ int BosfsImpl::chown(const char *path, uid_t uid, gid_t gid) {
     return 0;
 }
 
-int BosfsImpl::utimens(const char *path, const struct timespec ts[2]) {
-    std::string realpath = _bosfs_util.get_real_path(path);
-    path = realpath.c_str();
+int BosfsImpl::utimens(const char *path, const struct timespec ts[2], fuse_file_info *fi) {
+    std::string realpath;
+    if (fi != nullptr) {
+        DataCacheEntity *ent = (DataCacheEntity *) fi->fh;
+        path = ent->get_path();
+    } else {
+        realpath = _bosfs_util.get_real_path(path);
+        path = realpath.c_str();
+    }
+
     if (strcmp(path, "/") == 0) {
         _bosfs_util.mutable_options().mount_time = ts[1].tv_sec;
         return 0;
@@ -661,10 +691,19 @@ int BosfsImpl::utimens(const char *path, const struct timespec ts[2]) {
     return 0;
 }
 
-int BosfsImpl::getattr(const char *path, struct stat *stbuf) {
+int BosfsImpl::getattr(const char *path, struct stat *stbuf, fuse_file_info *fi) {
     // st t() requires path executable
-    std::string realpath = _bosfs_util.get_real_path(path);
-    path = realpath.c_str();
+    std::string realpath;
+    if (fi != nullptr) {
+        DataCacheEntity *ent = (DataCacheEntity *) fi->fh;
+        path = ent->get_path();
+        BOSFS_INFO("getattr [fi->fh=%lx][path:%s]", fi->fh, path);
+    } else {
+        BOSFS_INFO("getattr [path=%s]", path);
+        realpath = _bosfs_util.get_real_path(path);
+        path = realpath.c_str();
+    }
+
     int ret = _bosfs_util.check_path_accessible(path);
     if (ret != 0) {
         return ret;
@@ -696,9 +735,19 @@ int BosfsImpl::getattr(const char *path, struct stat *stbuf) {
     return 0;
 }
 
-int BosfsImpl::truncate(const char* path, off_t size) {
-    std::string realpath = _bosfs_util.get_real_path(path);
-    path = realpath.c_str();
+int BosfsImpl::truncate(const char* path, off_t size, fuse_file_info *fi) {
+
+    std::string realpath;
+    if (fi != nullptr) {
+        DataCacheEntity *ent = (DataCacheEntity *) fi->fh;
+        path = ent->get_path();
+        BOSFS_INFO("truncate [fi->fh=%lx][size:%lu][path:%s]", fi->fh, size, path);
+    } else {
+        BOSFS_INFO("truncate [path=%s][size:%lu]", path, size);
+        realpath = _bosfs_util.get_real_path(path);
+        path = realpath.c_str();
+    }
+
     BOSFS_INFO("truncate file %s to %ld", path, size);
     int ret = _bosfs_util.check_path_accessible(path);
     if (ret != 0) {
@@ -836,10 +885,11 @@ int BosfsImpl::listxattr(const char *path, char *buffer, size_t size) {
     return off;
 }
 
-int BosfsImpl::removexattr(const char *path, const char *name)
-{
+int BosfsImpl::removexattr(const char *path, const char *name) {
+    std::string realpath = _bosfs_util.get_real_path(path);
+    path = realpath.c_str();
     if (0 == strcmp(path, "/")) {
-        LOG(ERROR) << "ignored removexattr for mountpoint, path:" << path << " name:" << name;
+        LOG(ERROR) << "ignored removexattr for bucket, path:" << path << " name:" << name;
         return 0;
     }
     int ret = _bosfs_util.check_path_accessible(path);
@@ -882,17 +932,11 @@ int BosfsImpl::removexattr(const char *path, const char *name)
     return 0;
 }
 
-#if defined(__APPLE__)
-int BosfsImpl::setxattr(const char *path, const char *name, const char *value, size_t size, int flag,
-        uint32_t)
-#else
-int BosfsImpl::setxattr(const char *path, const char *name, const char *value, size_t size, int flag)
-#endif
-{
+int BosfsImpl::setxattr(const char *path, const char *name, const char *value, size_t size, int flag) {
     std::string realpath = _bosfs_util.get_real_path(path);
     path = realpath.c_str();
     if (0 == strcmp(path, "/")) {
-        LOG(ERROR) << "ignored setxattr for mountpoint, path:" << path << " name:" << name
+        LOG(ERROR) << "ignored setxattr for bucket, path:" << path << " name:" << name
             << " value:" << std::string(value, size);
         return 0;
     }
@@ -957,12 +1001,7 @@ int BosfsImpl::setxattr(const char *path, const char *name, const char *value, s
     return 0;
 }
 
-#if defined(__APPLE__)
-int BosfsImpl::getxattr(const char *path, const char *name, char *value, size_t size, uint32_t)
-#else
-int BosfsImpl::getxattr(const char *path, const char *name, char *value, size_t size)
-#endif
-{
+int BosfsImpl::getxattr(const char *path, const char *name, char *value, size_t size) {
     std::string realpath = _bosfs_util.get_real_path(path);
     path = realpath.c_str();
     int ret = _bosfs_util.check_path_accessible(path);

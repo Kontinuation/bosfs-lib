@@ -170,24 +170,24 @@ int Bosfs::releasedir(const char* path, struct fuse_file_info *fi) {
     return _bosfs_impl->releasedir(path, fi);
 }
 
-int Bosfs::chmod(const char *path, mode_t mode) {
-    return _bosfs_impl->chmod(path, mode);
+int Bosfs::chmod(const char *path, mode_t mode, fuse_file_info *fi) {
+    return _bosfs_impl->chmod(path, mode, fi);
 }
 
-int Bosfs::chown(const char *path, uid_t uid, gid_t gid) {
-    return _bosfs_impl->chown(path, uid, gid);
+int Bosfs::chown(const char *path, uid_t uid, gid_t gid, fuse_file_info *fi) {
+    return _bosfs_impl->chown(path, uid, gid, fi);
 }
 
-int Bosfs::utimens(const char *path, const struct timespec ts[2]) {
-    return _bosfs_impl->utimens(path, ts);
+int Bosfs::utimens(const char *path, const struct timespec ts[2], fuse_file_info *fi) {
+    return _bosfs_impl->utimens(path, ts, fi);
 }
 
-int Bosfs::getattr(const char *path, struct stat *stbuf) {
-    return _bosfs_impl->getattr(path, stbuf);
+int Bosfs::getattr(const char *path, struct stat *stbuf, fuse_file_info *fi) {
+    return _bosfs_impl->getattr(path, stbuf, fi);
 }
 
-int Bosfs::truncate(const char* path, off_t size) {
-    return _bosfs_impl->truncate(path, size);
+int Bosfs::truncate(const char* path, off_t size, fuse_file_info *fi) {
+    return _bosfs_impl->truncate(path, size, fi);
 }
 
 int Bosfs::listxattr(const char *path, char *buffer, size_t size) {
@@ -305,28 +305,23 @@ static int bosfs_releasedir(const char* path, struct fuse_file_info *fi) {
 }
 
 static int bosfs_chmod(const char *path, mode_t mode, fuse_file_info *fi) {
-    (void) fi;
-    return get_bosfs()->chmod(path, mode);
+    return get_bosfs()->chmod(path, mode, fi);
 }
 
 static int bosfs_chown(const char *path, uid_t uid, gid_t gid, fuse_file_info *fi) {
-    (void) fi;
-    return get_bosfs()->chown(path, uid, gid);
+    return get_bosfs()->chown(path, uid, gid, fi);
 }
 
 static int bosfs_utimens(const char *path, const struct timespec ts[2], fuse_file_info *fi) {
-    (void) fi;
-    return get_bosfs()->utimens(path, ts);
+    return get_bosfs()->utimens(path, ts, fi);
 }
 
 static int bosfs_getattr(const char *path, struct stat *stbuf, fuse_file_info *fi) {
-    (void) fi;
-    return get_bosfs()->getattr(path, stbuf);
+    return get_bosfs()->getattr(path, stbuf, fi);
 }
 
 static int bosfs_truncate(const char* path, off_t size, fuse_file_info *fi) {
-    (void) fi;
-    return get_bosfs()->truncate(path, size);
+    return get_bosfs()->truncate(path, size, fi);
 }
 
 static int bosfs_listxattr(const char *path, char *buffer, size_t size) {

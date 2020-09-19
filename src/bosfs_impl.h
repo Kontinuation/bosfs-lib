@@ -64,12 +64,12 @@ public:
         struct fuse_file_info *fi, enum fuse_readdir_flags flags);
     int releasedir(const char* path, struct fuse_file_info *fi);
 
-    int chmod(const char *path, mode_t mode);
-    int chown(const char *path, uid_t uid, gid_t gid);
-    int utimens(const char *path, const struct timespec ts[2]);
-    int truncate(const char* path, off_t size);
+    int chmod(const char *path, mode_t mode, fuse_file_info *fi);
+    int chown(const char *path, uid_t uid, gid_t gid, fuse_file_info *fi);
+    int utimens(const char *path, const struct timespec ts[2], fuse_file_info *fi);
+    int truncate(const char* path, off_t size, fuse_file_info *fi);
 
-    int getattr(const char *path, struct stat *stbuf);
+    int getattr(const char *path, struct stat *stbuf, fuse_file_info *fi);
     int listxattr(const char *path, char *list, size_t size);
     int removexattr(const char *path, const char *name);
     int setxattr(const char *p, const char *name, const char *value, size_t size, int flags);
