@@ -397,7 +397,7 @@ static int bosfs_main(int argc, char *argv[]) {
     Bosfs *bosfs = new Bosfs();
     int ret = bosfs_prepare_fs_operations(s_bucket_path, s_mountpoint_path, bosfs, s_bosfs_options, bosfs_operation, errmsg);
     if (ret != 0) {
-        die("%s", errmsg.c_str());
+        die("preparation failed: %s", errmsg.c_str());
     }
     
     ret = fuse_main(custom_args.argc, custom_args.argv, &bosfs_operation, bosfs);

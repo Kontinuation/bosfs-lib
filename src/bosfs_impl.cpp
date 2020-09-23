@@ -51,6 +51,7 @@ int BosfsImpl::init_bos(BosfsOptions &bosfs_options, std::string &errmsg) {
 
 void BosfsImpl::init(struct fuse_conn_info *conn, fuse_config *cfg) {
     BOSFS_INFO("fuse init");
+    cfg->use_ino = 0;
     cfg->nullpath_ok = 1;
 
     cfg->entry_timeout = 0;
@@ -86,7 +87,7 @@ int BosfsImpl::create(const char *path, mode_t mode, struct fuse_file_info *fi)
     std::string realpath = _bosfs_util.get_real_path(path);
     path = realpath.c_str();
     int ret = BOSFS_OK;
-    struct fuse_context *pctx = fuse_get_context();
+    struct fuse_context *pctx = _bosfs_util.fuse_get_context();
     if (NULL == pctx) {
         return -EIO;
     }
@@ -229,10 +230,8 @@ int BosfsImpl::symlink(const char *target, const char *path) {
     BOSFS_INFO("symlink %s -> %s", path, target);
     std::string realpath = _bosfs_util.get_real_path(path);
     path = realpath.c_str();
-    std::string real_targetpath = _bosfs_util.get_real_path(target);
-    target = real_targetpath.c_str();
 
-    struct fuse_context *pctx = fuse_get_context();
+    struct fuse_context *pctx = _bosfs_util.fuse_get_context();
     if (pctx == NULL) {
         return -EIO;
     }
@@ -284,6 +283,9 @@ int BosfsImpl::readlink(const char *path, char *buf, size_t size) {
         return 0;
     }
 
+    std::string realpath = _bosfs_util.get_real_path(path);
+    path = realpath.c_str();
+
     DataCacheEntity *ent = NULL;
     if (NULL == (ent = _bosfs_util.get_local_entity(path))) {
         BOSFS_ERR("could not get entity(file = %s)", path);
@@ -312,7 +314,7 @@ int BosfsImpl::mknod(const char *path, mode_t mode, dev_t rdev) {
     std::string realpath = _bosfs_util.get_real_path(path);
     path = realpath.c_str();
     struct fuse_context *pctx = NULL;
-    if (NULL == (pctx = fuse_get_context())) {
+    if (NULL == (pctx = _bosfs_util.fuse_get_context())) {
         return -EIO;
     }
     int ret = _bosfs_util.check_parent_object_access(path, W_OK | X_OK);
@@ -343,7 +345,7 @@ int BosfsImpl::mkdir(const char *path, mode_t mode) {
     std::string realpath = _bosfs_util.get_real_path(path);
     path = realpath.c_str();
     struct fuse_context *pctx = NULL;
-    if (NULL == (pctx = fuse_get_context())) {
+    if (NULL == (pctx = _bosfs_util.fuse_get_context())) {
         return -EIO;
     }
 
@@ -604,7 +606,7 @@ int BosfsImpl::chown(const char *path, uid_t uid, gid_t gid, fuse_file_info *fi)
         return ret;
     }
     
-    struct fuse_context *pctx = fuse_get_context();
+    struct fuse_context *pctx = _bosfs_util.fuse_get_context();
     if (pctx == NULL) {
         return -EIO;
     }

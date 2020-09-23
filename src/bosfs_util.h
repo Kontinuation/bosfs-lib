@@ -42,6 +42,8 @@ public:
     BosfsUtil();
     ~BosfsUtil();
 
+    struct fuse_context *fuse_get_context();
+
     void set_file_manager(FileManager *file_manager);
     void set_data_cache(DataCache *data_cache);
 

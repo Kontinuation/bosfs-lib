@@ -64,6 +64,9 @@ struct BosfsOptions {
     bool               remove_cache = false;
     bool               create_bucket = false;
     uint64_t           bos_client_timeout = 1200;
+
+    // for running unittest
+    bool               mock_fuse_calls = false;
 };
 
 class DataCache;

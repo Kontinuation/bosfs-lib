@@ -40,6 +40,17 @@ BosfsUtil::~BosfsUtil() {
     _data_cache = nullptr;
 }
 
+struct fuse_context *BosfsUtil::fuse_get_context() {
+    if (!options().mock_fuse_calls) {
+        return ::fuse_get_context();
+    } else {
+        static struct fuse_context s_fuse_context;
+        s_fuse_context.uid = geteuid();
+        s_fuse_context.gid = getegid();
+        return &s_fuse_context;
+    }
+}
+
 void BosfsUtil::set_file_manager(FileManager *file_manager) {
     _file_manager = file_manager;
 }
@@ -139,6 +150,23 @@ int BosfsUtil::init_bos(BosfsOptions &bosfs_options, std::string &errmsg) {
     if (ret != 0) {
         return ret;
     }
+
+    // check bucket existence
+    ret = exist_bucket(errmsg);
+    if (ret != 0) {
+        if (options().create_bucket) {
+            ret = create_bucket(errmsg);
+        }
+        if (ret != 0) {
+            if (options().create_bucket) {
+                errmsg = "create bucket failed";
+            } else {
+                errmsg = "bucket does not exist";
+            }
+            return ret;
+        }
+    }
+
     //check bucket_prefix exit
     bool is_dir_obj = false;
     bool is_prefix = false;
@@ -149,23 +177,12 @@ int BosfsUtil::init_bos(BosfsOptions &bosfs_options, std::string &errmsg) {
         }
         ret = head_object(prefix, NULL, &is_dir_obj, &is_prefix);
         if (ret != 0) {
-            return ret;
+            return return_with_error_msg(errmsg, "bucket prefix %s does not exist", prefix.c_str());
         }
         if (!is_dir_obj && !is_prefix) {
             return return_with_error_msg(errmsg, "not mounting a directory");
         }
         return 0;
-    }
-
-    // check bucket existence
-    ret = exist_bucket(errmsg);
-    if (ret != 0) {
-        if (options().create_bucket) {
-            ret = create_bucket(errmsg);
-        }
-        if (ret != 0) {
-            return ret;
-        }
     }
 
     // check cache dir
@@ -236,7 +253,7 @@ int BosfsUtil::check_object_access(const char *path, int mask, struct stat *pstb
     int ret = 0;
 
     struct fuse_context *pctx;
-    if (NULL == (pctx = fuse_get_context())) {
+    if (NULL == (pctx = this->fuse_get_context())) {
         return -EIO;
     }
 
@@ -365,7 +382,7 @@ int BosfsUtil::check_parent_object_access(const char *path, int mask) {
 int BosfsUtil::check_object_owner(const char *path, struct stat *pstbuf)
 {
     struct fuse_context *pctx = NULL;
-    if (NULL == (pctx = fuse_get_context())) {
+    if (NULL == (pctx = this->fuse_get_context())) {
         return -EIO;
     }
     int ret = 0;
