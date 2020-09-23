@@ -151,23 +151,7 @@ int BosfsUtil::init_bos(BosfsOptions &bosfs_options, std::string &errmsg) {
         return ret;
     }
 
-    // check bucket existence
-    ret = exist_bucket(errmsg);
-    if (ret != 0) {
-        if (options().create_bucket) {
-            ret = create_bucket(errmsg);
-        }
-        if (ret != 0) {
-            if (options().create_bucket) {
-                errmsg = "create bucket failed";
-            } else {
-                errmsg = "bucket does not exist";
-            }
-            return ret;
-        }
-    }
-
-    //check bucket_prefix exit
+    // check bucket_prefix exit
     bool is_dir_obj = false;
     bool is_prefix = false;
     std::string prefix = options().bucket_prefix;
@@ -176,11 +160,21 @@ int BosfsUtil::init_bos(BosfsOptions &bosfs_options, std::string &errmsg) {
            prefix = options().bucket_prefix.substr(0, options().bucket_prefix.size() - 1); 
         }
         ret = head_object(prefix, NULL, &is_dir_obj, &is_prefix);
-        if (ret != 0) {
-            return return_with_error_msg(errmsg, "bucket prefix %s does not exist", prefix.c_str());
-        }
-        if (!is_dir_obj && !is_prefix) {
-            return return_with_error_msg(errmsg, "not mounting a directory");
+        if (ret == 0) {
+            if (!is_dir_obj && !is_prefix) {
+                return return_with_error_msg(errmsg, "not mounting a directory");
+            }
+        } else {
+            if (options().create_prefix) {
+                BOSFS_INFO("bucket prefix %s does not exist, creating directory", prefix.c_str());
+                std::string dir_path = "/" + prefix;
+                ret = create_object(dir_path.c_str(), S_IFDIR | 0755, options().mount_uid, options().mount_gid);
+                if (ret != 0) {
+                    return return_with_error_msg(errmsg, "creating mounted directory object failed");
+                }
+            } else {
+                return return_with_error_msg(errmsg, "bucket prefix %s does not exist", prefix.c_str());
+            }
         }
         return 0;
     }
@@ -345,8 +339,9 @@ int BosfsUtil::get_object_attribute(const std::string &path, struct stat *pstbuf
 // check each path component has searching permission
 int BosfsUtil::check_path_accessible(const char *path) {
     std::string parent(path);
+    size_t prefix_size = options().bucket_prefix.size();
     size_t pos = parent.rfind('/');
-    while (pos != 0) {
+    while (pos > prefix_size) {
         parent.resize(pos);
         int ret = check_object_access(parent.c_str(), X_OK, NULL);
         if (ret != 0) {
@@ -572,7 +567,10 @@ int BosfsUtil::head_object(const std::string &object, ObjectMetaData *meta, bool
             meta->move_from(res.meta());
         }
         return BOSFS_OK;
-    } else if (res.status_code() != 404) {
+    } else if (res.status_code() != 404 && res.status_code() != 403) {
+        // target directory might be mounted to a bucket prefix using STS
+        // credential, which does not have permission of "prefix" but have
+        // permission of "prefix/", so we 403 is also an expected error.
         BOSFS_WARN("head object(%s) failed, bos service error: %s", object.c_str(),
                 res.error().message().c_str());
         return BOSFS_BOS_SERVICE_ERROR;

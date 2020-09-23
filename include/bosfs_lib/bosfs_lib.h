@@ -62,7 +62,7 @@ struct BosfsOptions {
     bool               is_bosfs_gid = false;
     bool               is_bosfs_umask = false;
     bool               remove_cache = false;
-    bool               create_bucket = false;
+    bool               create_prefix = false;
     uint64_t           bos_client_timeout = 1200;
 
     // for running unittest

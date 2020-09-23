@@ -142,8 +142,8 @@ static void init_bos_args() {
     s_bos_args["bos.fs.storage_class"] = BosfsConfItem("storage_class",
             "standard or standard_ia; case ignored",
             "when specified this option, any upload action will use the storage class");
-    s_bos_args["bos.fs.createbucket"] = BosfsConfItem("createbucket", "",
-            "create bucket if not exist when mounting");
+    s_bos_args["bos.fs.createprefix"] = BosfsConfItem("createprefix", "",
+            "create directory object if not exist when mounting");
     s_bos_args["bos.fs.tmpdir"] = BosfsConfItem("tmpdir", "an existing directory in absolute path",
             "specified where bosfs creates temporary file in, default is /tmp");
     s_bos_args["bos.sdk.multipart_size"] = BosfsConfItem("", "number small than 5GB, can use unit KB,MB",
@@ -205,8 +205,8 @@ static int parse_bos_args(BosfsOptions &bosfs_options, std::string &errmsg) {
 		}
         bosfs_options.meta_capacity = num;
     }
-    if (s_bos_args["bos.fs.createbucket"].is_set) {
-        bosfs_options.create_bucket = true;
+    if (s_bos_args["bos.fs.createprefix"].is_set) {
+       bosfs_options.create_prefix = true;
     }
     if (s_bos_args["bos.fs.storage_class"].is_set) {
         bosfs_options.storage_class = StringUtil::upper(s_bos_args["bos.fs.storage_class"].value);
